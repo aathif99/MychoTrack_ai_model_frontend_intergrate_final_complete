@@ -1,0 +1,45 @@
+node.js
+
+PS C:\Users\DELL\Desktop\research_project> cd backend
+PS C:\Users\DELL\Desktop\research_project\backend> npm install
+PS C:\Users\DELL\Desktop\research_project\backend> npm start
+
+
+
+ai_service (Google Colab Cloud AI):
+- Run Cell 1 and Cell 2 in your Google Colab notebook
+- Copy the generated URL (e.g., https://xxx.trycloudflare.com)
+- Paste into backend/.env: FASTAPI_URL=https://xxx.trycloudflare.com
+- (You do NOT need to run python main.py or activate local venv anymore!)
+
+adb connection:
+adb reverse tcp:3000 tcp:3000
+
+
+
+xamp
+
+
+apache on
+mysql on
+
+3JuQ1BEGpeVxa0n9zWNExOo5ejW_6FnefxD15AQXbxWWaY41m auth token by ngrok
+
+jwrb zqbt dnqi yxzf   app password
+
+
+
+Name	Value
+DB_HOST	skindisease-db-dell.mysql.database.azure.com
+DB_USER	Aathif
+DB_PASSWORD	Aathif225588#
+DB_NAME	skin_disease_db
+DB_SSL	true
+JWT_SECRET	supersecretjwtkey_replace_me_in_production
+JWT_EXPIRES_IN	30d
+FASTAPI_URL	https://untapped-champion-porcupine.ngrok-free.dev
+SMTP_HOST	smtp.gmail.com
+SMTP_PORT	587
+SMTP_USER	your_gmail_address@gmail.com (replace with your actual Gmail)
+SMTP_PASS	your_16_character_app_password (the 16 letters you generated)
+SCM_DO_BUILD_DURING_DEPLOYMENT	true

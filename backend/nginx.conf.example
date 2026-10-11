@@ -1,0 +1,24 @@
+# Optional Nginx Reverse Proxy Configuration
+# Place this at /etc/nginx/sites-available/skin_backend
+# Then: sudo ln -s /etc/nginx/sites-available/skin_backend /etc/nginx/sites-enabled/
+# Then: sudo nginx -t && sudo systemctl restart nginx
+
+server {
+    listen 80;
+    server_name _; # Or replace with your domain name (e.g. api.yourdomain.com)
+
+    # Increase maximum upload file size for images
+    client_max_body_size 50M;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

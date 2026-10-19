@@ -11,15 +11,18 @@
 # ==============================================================================
 # ARCHIVE & TEMPORARY FILES (Large files > 100MB blocked by GitHub)
 # ==============================================================================
+*.apk
 *.zip
 *.tar
 *.gz
 *.keras
 *.h5
 *.tflite
+!frontend/assets/models/*.tflite
 home_bg_orig.jpg
 backend_deploy.zip
 backend.zip
+backend/test_heatmaps/
 
 # ==============================================================================
 # NODE.JS / BACKEND

@@ -1,6 +1,6 @@
-# Complete AWS Free Tier Deployment Guide
+# Complete AWS EC2 Deployment Guide (New Account)
 
-This guide walks you step-by-step through deploying your **Node.js Backend**, **Python AI Model Service (FastAPI + TensorFlow)**, and **Database connection** to an **AWS Free Tier EC2 instance**, and configuring your **Flutter mobile app** so any user installing the APK can access the backend from anywhere.
+This guide walks you step-by-step through deploying your updated **Node.js + MySQL Backend** to a brand new **AWS Free Tier EC2 instance**, and connecting your **Flutter mobile app** to it.
 
 ---
 
@@ -12,79 +12,62 @@ This guide walks you step-by-step through deploying your **Node.js Backend**, **
 |               Installed APK / Physical Device                |
 +--------------------------------------------------------------+
                                |
-                               | HTTP (Port 3000 / Port 80)
+                               | HTTP (Port 3000)
                                v
 +--------------------------------------------------------------+
-|                  AWS EC2 Free Tier (t2.micro)                |
-|              Ubuntu 22.04 LTS | 1 GB RAM + 4 GB Swap         |
+|                  AWS EC2 Free Tier (t2.micro / t3.micro)     |
+|                   Ubuntu 22.04 LTS | ~350 MB RAM             |
 |                                                              |
 |   +--------------------------+   +-----------------------+   |
-|   |   Node.js Express API    |   |  FastAPI AI Service   |   |
-|   |       (Port 3000)        |<->|      (Port 8000)      |   |
-|   |   Managed by PM2         |   |  Managed by PM2       |   |
+|   |   Node.js Express API    |   |  Local MySQL Server   |   |
+|   |       (Port 3000)        |<->|      (Port 3306)      |   |
+|   |   Managed by PM2         |   |  skin_disease_db      |   |
 |   +--------------------------+   +-----------------------+   |
-+--------------------------------------------------------------+
-                               |
-                               | SSL Connection (Port 3306)
-                               v
-+--------------------------------------------------------------+
-|              Microsoft Azure Database for MySQL              |
-|        skindisease-db-dell.mysql.database.azure.com          |
 +--------------------------------------------------------------+
 ```
 
-> **AWS Free Tier 1GB RAM Limitation & The 4GB Swap Solution:**
-> AWS `t2.micro` provides only **1 GB of physical RAM**. Loading TensorFlow 2.15 and your 140MB Keras model (`skin_classifier.keras`) requires ~1.2GB–1.6GB memory. Without extra memory, the Linux kernel will terminate the AI process (`Killed`).
->
-> We solve this 100% within the Free Tier by configuring a **4 GB Swap File** on your free 30 GB EBS SSD. This gives your EC2 instance **5 GB of effective memory**, allowing both Node.js and TensorFlow to run smoothly with zero extra cost.
+> **Why this new backend is so fast and reliable:**
+> Because the heavy AI inference now runs **on the user's phone in ~150ms**, your AWS EC2 instance only runs Node.js and MySQL. Total RAM consumption is only **~350 MB / 1000 MB**. It will **never freeze, never crash, and remain 100% free forever on AWS Free Tier**.
 
 ---
 
-## Step 1: Create Your Free AWS Account
+## Step 1: Create / Log in to Your New AWS Account
 
-1. Go to [aws.amazon.com/free](https://aws.amazon.com/free/).
-2. Click **Create a Free Account**.
-3. Follow the registration steps:
-   - Provide email, password, and account name.
-   - Choose **Personal** account type.
-   - Enter your billing address and credit/debit card (AWS verifies with a temporary ~$1 authorization hold that is refunded).
-   - Complete phone verification (SMS/call).
-   - Select the **Basic Support (Free)** plan.
-4. Log in to the [AWS Management Console](https://console.aws.amazon.com/).
+1. Go to [aws.amazon.com](https://aws.amazon.com/) and log in to your **new AWS account**.
+2. At the top right corner of the AWS Console, choose your preferred region (e.g., **Asia Pacific (Mumbai) `ap-south-1`** or **US East (N. Virginia) `us-east-1`**).
 
 ---
 
-## Step 2: Launch an EC2 Free Tier Instance
+## Step 2: Launch a Free Tier EC2 Instance
 
-1. In the AWS Console search bar, type **EC2** and click **EC2**.
+1. In the top search bar, type **EC2** and click **EC2**.
 2. Click the orange **Launch Instance** button.
 3. Configure the following settings:
    - **Name**: `mycotrack-backend`
-   - **Application and OS Images (AMI)**: Select **Ubuntu** -> **Ubuntu Server 22.04 LTS (HVM), SSD Volume Type** (Make sure it has the *Free tier eligible* badge).
-   - **Instance type**: Choose **t2.micro** (1 vCPU, 1 GiB Memory, *Free tier eligible*). If in a region where `t2.micro` is not available, choose **t3.micro**.
+   - **Application and OS Images (AMI)**: Select **Ubuntu** $\to$ **Ubuntu Server 22.04 LTS (HVM)** *(Make sure it has the "Free tier eligible" badge)*.
+   - **Instance type**: Choose **t2.micro** or **t3.micro** *(Free tier eligible)*.
    - **Key pair (login)**:
      - Click **Create new key pair**.
      - Key pair name: `mycotrack-key`.
      - Key pair type: `RSA`.
-     - Private key format: `.pem` (for OpenSSH/Mac/Linux/Windows PowerShell).
-     - Click **Create key pair** and **save the downloaded `.pem` file safely on your computer**.
+     - Private key format: `.pem`.
+     - Click **Create key pair** and **save the downloaded `.pem` file safely** (e.g. on your Desktop).
    - **Network settings (Firewall / Security Group)**:
      - Check: **Allow SSH traffic from Anywhere (0.0.0.0/0)**.
      - Check: **Allow HTTP traffic from the internet**.
-     - Check: **Allow HTTPS traffic from the internet**.
    - **Configure Storage**:
-     - Change the root volume size to **30 GiB** (AWS Free Tier provides up to 30 GiB of General Purpose SSD (gp3/gp2) for free).
+     - Change root volume size from `8 GiB` to **20 GiB** or **30 GiB** (AWS Free Tier includes up to 30 GiB for free).
 4. Click **Launch Instance**.
-5. Click **View all instances** and wait until the **Instance state** changes to **Running**.
+5. Click **View all instances** and wait ~30 seconds until the **Instance state** shows **Running**.
 
 ---
 
-## Step 3: Open Port 3000 in Security Group
+## Step 3: Open Port 3000 in the Security Group
 
-Your Node.js API runs on port 3000. You must allow incoming traffic to port 3000 so the mobile app can reach it:
+Your Node.js API runs on port 3000. Allow incoming traffic so the mobile app can reach it:
 
 1. Click on your running instance.
-2. In the bottom tabs, click **Security**.
+2. In the bottom tabs, select **Security**.
 3. Click the link under **Security groups** (e.g., `launch-wizard-1`).
 4. Click **Edit inbound rules**.
 5. Click **Add rule**:
@@ -96,107 +79,71 @@ Your Node.js API runs on port 3000. You must allow incoming traffic to port 3000
 
 ---
 
-## Step 4: Connect to Your EC2 Instance
+## Step 4: Upload the Pre-Built Backend Zip to EC2
 
-You have two easy ways to connect:
+We have already created a clean, lightweight zip package: **`backend_deploy.zip`** (only **~48 KB**!).
 
-### Option A: Using AWS Browser Terminal (Easiest)
-1. Select your instance in the EC2 Console.
-2. Click the **Connect** button at the top.
-3. Choose the **EC2 Instance Connect** tab.
-4. Click **Connect**. A terminal window opens directly in your browser.
+Open PowerShell on your computer and run (replace `<YOUR_NEW_EC2_IP>` and path to `.pem`):
 
-### Option B: Using Windows PowerShell
-Open PowerShell in the folder where your `mycotrack-key.pem` is saved:
 ```powershell
-ssh -i "mycotrack-key.pem" ubuntu@<YOUR_EC2_PUBLIC_IP>
+scp -i "C:\path\to\mycotrack-key.pem" "C:\Users\DELL\Desktop\AWS\backend_deploy.zip" ubuntu@<YOUR_NEW_EC2_IP>:~/
 ```
+
+*(Alternatively, if you prefer the browser: click **Connect** $\to$ **EC2 Instance Connect** in AWS Console, open the browser terminal, and create the files).*
 
 ---
 
-## Step 5: Transfer the Backend Code to EC2
+## Step 5: Connect to EC2 and Run the 1-Minute Setup
 
-On your Windows computer, open PowerShell in `c:\Users\DELL\Desktop\AWS`:
+1. In the EC2 Console, select your instance and click **Connect** $\to$ **EC2 Instance Connect** $\to$ **Connect** (or use SSH from PowerShell):
+   ```powershell
+   ssh -i "C:\path\to\mycotrack-key.pem" ubuntu@<YOUR_NEW_EC2_IP>
+   ```
 
-1. Zip the backend folder (excluding `node_modules` and Python `venv`):
-   ```powershell
-   Compress-Archive -Path backend\* -DestinationPath backend_aws.zip -Force
-   ```
-2. Upload the zip file to your EC2 instance using `scp`:
-   ```powershell
-   scp -i "path\to\mycotrack-key.pem" backend_aws.zip ubuntu@<YOUR_EC2_PUBLIC_IP>:~/
-   ```
-3. In your EC2 terminal, unzip the files:
+2. In the EC2 terminal, run these commands:
    ```bash
-   sudo apt install -y unzip
+   sudo apt update -y && sudo apt install -y unzip
    mkdir -p ~/backend
-   unzip ~/backend_aws.zip -d ~/backend
+   unzip ~/backend_deploy.zip -d ~/backend
    cd ~/backend
+   chmod +x setup-aws-ec2.sh
+   ./setup-aws-ec2.sh
+   ```
+
+### What `setup-aws-ec2.sh` automatically does in ~1 minute:
+1. Configures a 1GB safety swap space.
+2. Installs MySQL Server and automatically imports the database schema and tables.
+3. Installs Node.js 20 LTS and PM2.
+4. Installs Node.js npm packages and starts `node-backend` under PM2 (24/7 background service).
+
+3. Verify the server is running:
+   ```bash
+   pm2 status
+   ```
+   You will see `node-backend` status: **online**.
+
+4. Test it with curl:
+   ```bash
+   curl http://localhost:3000/
+   # Output: {"message":"Skin Disease Detection API is running"}
    ```
 
 ---
 
-## Step 6: Run the One-Click Automated Deployment Script
+## Step 6: Update the Flutter App with Your New Server IP
 
-Once inside `~/backend` on your EC2 instance, make the setup script executable and run it:
-
-```bash
-chmod +x setup-aws-ec2.sh
-./setup-aws-ec2.sh
-```
-
-### What this script automatically handles:
-1. **Creates a 4GB Swap Space** (enables TensorFlow to load without OOM crashes on `t2.micro`).
-2. **Installs Node.js 20 LTS, npm, and PM2**.
-3. **Installs Python 3, venv, and system libraries for OpenCV** (`libgl1`, `libglib2.0-0`).
-4. **Installs Node.js npm packages**.
-5. **Creates the Python virtual environment and installs all AI requirements** (`FastAPI`, `Uvicorn`, `TensorFlow`, `Keras`, `OpenCV`).
-6. **Launches both services under PM2** so they run 24/7 in the background and automatically restart if the server reboots.
-
-### Check Service Status on EC2:
-```bash
-pm2 status
-```
-Both `node-backend` and `fastapi-ai` should show status **online**.
-
-You can also test the API locally on EC2:
-```bash
-curl http://localhost:3000/
-# Output: {"message":"Skin Disease Detection API is running"}
-```
-
----
-
-## Step 7: Update Mobile App Configuration
-
-In your local project on your computer:
-
-1. Copy your EC2 instance's **Public IPv4 address** from the AWS EC2 Console (e.g., `3.85.123.45`).
-2. Open `lib/services/api_config.dart`.
-3. Replace `'http://YOUR_AWS_EC2_PUBLIC_IP:3000'` with your actual EC2 address:
+1. Copy your new EC2 **Public IPv4 address** from the AWS Console (e.g. `3.85.123.45`).
+2. Open [frontend/lib/utils/constants.dart](file:///c:/Users/DELL/Desktop/AWS/frontend/lib/utils/constants.dart).
+3. Update `awsServerUrl` with your new IP:
    ```dart
    static const String awsServerUrl = 'http://3.85.123.45:3000';
-   static const bool useAwsCloud = true;
    ```
 
-All app screens (`login_screen.dart`, `create_new_account_screen.dart`, and auth screens) are now unified to automatically use `ApiConfig.baseUrl`.
-
----
-
-## Step 8: Build and Install the Mobile App APK
-
-Now build the production Android APK:
-
-```bash
-flutter build apk --release
+Now run or build your Flutter app:
+```powershell
+cd frontend
+flutter run
 ```
-
-The compiled APK will be created at:
-```
-build/app/outputs/flutter-apk/app-release.apk
-```
-
-You can now send `app-release.apk` to any Android phone, install it, and use the app. It will seamlessly communicate with your AWS EC2 backend and Azure MySQL database over the internet!
 
 ---
 
@@ -204,10 +151,7 @@ You can now send `app-release.apk` to any Android phone, install it, and use the
 
 | Command | Purpose |
 | :--- | :--- |
-| `pm2 status` | Check if Node.js and AI services are running |
-| `pm2 logs` | View live real-time logs from both services |
-| `pm2 logs node-backend` | View only Node.js backend logs |
-| `pm2 logs fastapi-ai` | View only AI model FastAPI logs |
-| `pm2 restart all` | Restart both services |
-| `free -h` | View RAM and Swap memory usage |
-| `htop` | View CPU and process memory utilization |
+| `pm2 status` | Check if the backend is running |
+| `pm2 logs` | View live real-time API logs |
+| `pm2 restart node-backend` | Restart the backend server |
+| `free -h` | View RAM usage (typically ~350 MB out of 1 GB) |

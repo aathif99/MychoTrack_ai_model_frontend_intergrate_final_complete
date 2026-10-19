@@ -281,7 +281,7 @@ class _PastResultsScreenState extends State<PastResultsScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Image thumbnail
+              // Image thumbnail: Base original skin photo with stacked glowing heatmap overlay
               Container(
                 width: 65,
                 height: 65,
@@ -291,13 +291,27 @@ class _PastResultsScreenState extends State<PastResultsScreen> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: displayImagePath.isNotEmpty
-                      ? Image.network(
-                          '${AppConstants.serverUrl}$displayImagePath',
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (imagePath.isNotEmpty)
+                        Image.network(
+                          '${AppConstants.serverUrl}$imagePath',
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Icon(Icons.image, color: Colors.white54),
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.image, color: Colors.white54),
                         )
-                      : const Icon(Icons.image, color: Colors.white54),
+                      else
+                        const Icon(Icons.image, color: Colors.white54),
+                      if (heatmapPath.isNotEmpty)
+                        Image.network(
+                          '${AppConstants.serverUrl}$heatmapPath',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const SizedBox.shrink(),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 16),

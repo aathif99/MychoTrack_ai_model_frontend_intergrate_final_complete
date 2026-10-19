@@ -33,56 +33,72 @@ exports.predict = async (req, res) => {
         const imageId = imageResult.insertId;
         console.log('Image saved to DB, imageId:', imageId);
 
-        // 2. Call FastAPI Service with retry logic
-        const fastApiUrl = (process.env.FASTAPI_URL || 'http://127.0.0.1:8000').trim().replace(/\/+$/, '');
-        console.log('Calling FastAPI at:', `${fastApiUrl}/predict`);
-        let fastApiResponse;
-        const maxRetries = 3;
-        let lastError = null;
+        // Check if on-device prediction results were supplied by the mobile app
+        const clientPredicted = req.body.disease_name !== undefined || req.body.disease_id !== undefined;
+        let aiData = null;
 
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                // Re-create FormData for each attempt (streams can only be read once)
-                const formData = new FormData();
-                formData.append('file', fs.createReadStream(file.path));
+        if (clientPredicted) {
+            console.log('⚡ ON-DEVICE PREDICTION RECEIVED: Bypassing heavy AWS FastAPI service!');
+            aiData = {
+                model_class_index: req.body.model_class_index !== undefined ? parseInt(req.body.model_class_index) : null,
+                model_class: req.body.model_class || null,
+                disease_id: parseInt(req.body.disease_id) || 0,
+                disease_name: req.body.disease_name || 'Other',
+                confidence_score: parseFloat(req.body.confidence_score) || 0.0,
+                heatmap_base64: req.body.heatmap_base64 || ''
+            };
+        } else {
+            // 2. Call FastAPI Service with retry logic (legacy fallback)
+            const fastApiUrl = (process.env.FASTAPI_URL || 'http://127.0.0.1:8000').trim().replace(/\/+$/, '');
+            console.log('Calling FastAPI at:', `${fastApiUrl}/predict`);
+            let fastApiResponse;
+            const maxRetries = 3;
+            let lastError = null;
 
-                fastApiResponse = await axios.post(`${fastApiUrl}/predict`, formData, {
-                    headers: {
-                        ...formData.getHeaders()
-                    },
-                    maxContentLength: Infinity,
-                    maxBodyLength: Infinity,
-                    timeout: 120000
-                });
-                console.log(`FastAPI response received (attempt ${attempt}):`, fastApiResponse.status);
-                lastError = null;
-                break;
-            } catch (apiError) {
-                lastError = apiError;
-                console.log(`FASTAPI CALL FAILED (attempt ${attempt}/${maxRetries}):`, apiError.message);
-                if (attempt < maxRetries) {
-                    console.log(`Retrying in 3 seconds...`);
-                    await new Promise(resolve => setTimeout(resolve, 3000));
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    // Re-create FormData for each attempt (streams can only be read once)
+                    const formData = new FormData();
+                    formData.append('file', fs.createReadStream(file.path));
+
+                    fastApiResponse = await axios.post(`${fastApiUrl}/predict`, formData, {
+                        headers: {
+                            ...formData.getHeaders()
+                        },
+                        maxContentLength: Infinity,
+                        maxBodyLength: Infinity,
+                        timeout: 120000
+                    });
+                    console.log(`FastAPI response received (attempt ${attempt}):`, fastApiResponse.status);
+                    lastError = null;
+                    break;
+                } catch (apiError) {
+                    lastError = apiError;
+                    console.log(`FASTAPI CALL FAILED (attempt ${attempt}/${maxRetries}):`, apiError.message);
+                    if (attempt < maxRetries) {
+                        console.log(`Retrying in 3 seconds...`);
+                        await new Promise(resolve => setTimeout(resolve, 3000));
+                    }
                 }
             }
-        }
 
-        if (lastError) {
-            console.log('All retry attempts failed.');
-            console.log('Error details:', lastError.response ? JSON.stringify(lastError.response.data) : 'No response data');
-            // Delete the image record since prediction failed
-            await db.execute('DELETE FROM images WHERE image_id = ?', [imageId]);
-            // Delete the physical file safely
-            if (fs.existsSync(file.path)) {
-                try { fs.unlinkSync(file.path); } catch (e) {}
+            if (lastError) {
+                console.log('All retry attempts failed.');
+                console.log('Error details:', lastError.response ? JSON.stringify(lastError.response.data) : 'No response data');
+                // Delete the image record since prediction failed
+                await db.execute('DELETE FROM images WHERE image_id = ?', [imageId]);
+                // Delete the physical file safely
+                if (fs.existsSync(file.path)) {
+                    try { fs.unlinkSync(file.path); } catch (e) {}
+                }
+                return res.status(500).json({ 
+                    error: 'AI Service is unavailable or failed to process the image.',
+                    details: lastError.response?.data?.detail || lastError.message
+                });
             }
-            return res.status(500).json({ 
-                error: 'AI Service is unavailable or failed to process the image.',
-                details: lastError.response?.data?.detail || lastError.message
-            });
-        }
 
-        const aiData = fastApiResponse.data;
+            aiData = fastApiResponse.data;
+        }
         console.log('=== FASTAPI RESPONSE KEYS ===', Object.keys(aiData));
         const { confidence_score, heatmap_base64 } = aiData;
         console.log('heatmap_base64 received from FastAPI:', heatmap_base64 ? `YES (length: ${heatmap_base64.length})` : 'EMPTY/NULL');
@@ -134,12 +150,15 @@ exports.predict = async (req, res) => {
                     fs.mkdirSync(heatmapsDir, { recursive: true });
                 }
 
-                const heatmapFilename = `heatmap-${detectionId}-${Date.now()}.jpg`;
+                // Detect image format (PNG vs JPEG)
+                const isPng = heatmap_base64.includes('image/png') || heatmap_base64.startsWith('iVBORw0KGgo');
+                const ext = isPng ? 'png' : 'jpg';
+                const heatmapFilename = `heatmap-${detectionId}-${Date.now()}.${ext}`;
                 const heatmapFilePath = path.join(heatmapsDir, heatmapFilename);
                 
-                // Decode base64 and save
-                const base64Data = heatmap_base64.replace(/^data:image\/jpeg;base64,/, "");
-                fs.writeFileSync(heatmapFilePath, base64Data, 'base64');
+                // Strip ANY data URI scheme (png, jpeg, webp) cleanly
+                const base64Data = heatmap_base64.replace(/^data:image\/[a-zA-Z0-9+.-]+;base64,/, "");
+                fs.writeFileSync(heatmapFilePath, Buffer.from(base64Data.trim(), 'base64'));
                 
                 heatmapUrl = `/heatmaps/${heatmapFilename}`;
                 heatmapStatus = 'Generated';

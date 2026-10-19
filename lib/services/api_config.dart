@@ -8,7 +8,7 @@ class ApiConfig {
   /// =========================================================================
   /// Replace this with your AWS EC2 Public IPv4 or Domain Name once launched.
   /// Example: 'http://3.85.123.45:3000' or 'http://your-domain.com:3000'
-  static const String awsServerUrl = 'http://13.211.149.114:3000';
+  static const String awsServerUrl = 'http://3.111.55.81:3000';
 
   /// Set to true to connect the mobile app to AWS EC2 (for real users & APK builds)
   /// Set to false when developing locally with Android Studio emulator / localhost

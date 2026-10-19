@@ -62,20 +62,28 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
           ),
         ),
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => const Center(
-          child: Icon(Icons.broken_image, size: 50, color: Colors.grey),
-        ),
+        width: double.infinity,
+        height: double.infinity,
+        gaplessPlayback: true,
+        errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
       );
     } else if (widget.predictionResult.heatmapUrl.isNotEmpty) {
+      final url = widget.predictionResult.heatmapUrl.startsWith('http')
+          ? widget.predictionResult.heatmapUrl
+          : '${AppConstants.serverUrl}${widget.predictionResult.heatmapUrl}';
       return Image.network(
-        '${AppConstants.serverUrl}${widget.predictionResult.heatmapUrl}',
+        url,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => const Center(
-          child: Icon(Icons.broken_image, size: 50, color: Colors.grey),
-        ),
+        width: double.infinity,
+        height: double.infinity,
+        gaplessPlayback: true,
+        errorBuilder: (context, error, stackTrace) {
+          print('⚠️ Failed to load heatmap from network: $error (URL: $url)');
+          return const SizedBox.shrink();
+        },
       );
     }
-    return _buildOriginalImage();
+    return const SizedBox.shrink();
   }
 
   Widget _buildOriginalImage() {
@@ -90,6 +98,9 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
       return Image.network(
         imageUrl,
         fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        gaplessPlayback: true,
         errorBuilder: (context, error, stackTrace) => const Center(
           child: Icon(Icons.broken_image, size: 50, color: Colors.grey),
         ),
@@ -103,6 +114,9 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
         return Image.file(
           file,
           fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          gaplessPlayback: true,
           errorBuilder: (context, error, stackTrace) => const Center(
             child: Icon(Icons.broken_image, size: 50, color: Colors.grey),
           ),
@@ -113,6 +127,9 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
     return Image.network(
       '${AppConstants.serverUrl}$imageUrl',
       fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      gaplessPlayback: true,
       errorBuilder: (context, error, stackTrace) => const Center(
         child: Icon(Icons.broken_image, size: 50, color: Colors.grey),
       ),
@@ -185,10 +202,17 @@ class _AnalysisResultScreenState extends State<AnalysisResultScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          // Display Heatmap or Original Image
-                          _showHeatmap && hasHeatmap
-                              ? _buildHeatmapImage()
-                              : _buildOriginalImage(),
+                          // Layer 1: Permanent original image base - never reloads, never shifts, never shrinks
+                          _buildOriginalImage(),
+
+                          // Layer 2: Transparent heatmap overlay with smooth animated fade
+                          if (hasHeatmap)
+                            AnimatedOpacity(
+                              opacity: _showHeatmap ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeInOut,
+                              child: _buildHeatmapImage(),
+                            ),
 
                           // Single toggle button at top right corner
                           if (hasHeatmap)

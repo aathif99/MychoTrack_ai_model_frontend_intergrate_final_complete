@@ -370,6 +370,54 @@ class ApiService {
     }
   }
 
+  /// Sync on-device prediction result to AWS MySQL database in the background
+  Future<Map<String, dynamic>> syncDetection({
+    required String imagePath,
+    required PredictionResult prediction,
+    required String captureMethod,
+  }) async {
+    try {
+      final token = await getToken();
+      if (token == null) return {'success': false, 'message': 'Not authenticated'};
+
+      var request = http.MultipartRequest('POST', Uri.parse('${AppConstants.baseUrl}/predict'));
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['capture_method'] = captureMethod;
+      request.fields['disease_id'] = prediction.diseaseId.toString();
+      request.fields['disease_name'] = prediction.diseaseName;
+      request.fields['confidence_score'] = prediction.confidenceScore.toString();
+      if (prediction.heatmapBase64.isNotEmpty) {
+        request.fields['heatmap_base64'] = prediction.heatmapBase64;
+      }
+
+      final ext = imagePath.split('.').last.toLowerCase();
+      final mediaType = ext == 'png' ? MediaType('image', 'png') : MediaType('image', 'jpeg');
+
+      request.files.add(await http.MultipartFile.fromPath(
+        'image',
+        imagePath,
+        contentType: mediaType,
+      ));
+
+      // Fast 15s timeout since no heavy AI runs on AWS now
+      var streamedResponse = await request.send().timeout(const Duration(seconds: 15));
+      var response = await http.Response.fromStream(streamedResponse);
+      final data = _parseJson(response.body);
+
+      if (response.statusCode == 200 && data != null && data['result'] != null) {
+        print('⚡ ApiService: Successfully synced detection to AWS!');
+        return {
+          'success': true,
+          'result': PredictionResult.fromJson(data['result'])
+        };
+      }
+      return {'success': false, 'message': 'Sync returned ${response.statusCode}'};
+    } catch (e) {
+      print('⚠️ ApiService sync error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   // --- History API ---
 
   Future<List<HistoryItem>> getHistory() async {
